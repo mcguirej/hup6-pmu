@@ -96,7 +96,7 @@ subjIdx = strcmp(id,{dicomInfo.allOnsets.id});
 %%% there are 2 options here which give results differing by 2-3 sec
 %%% it's not clear which is correct
 %%% there are 2 dicom header fields that provide (different) timestamps
-% runOnset = dicomInfo.allOnsets(subjIdx).runOnset; % to use CONTENTTIMES field
+% runOnset = dicomInfo.allOnsets(subjIdx).runOnset_CT; % to use CONTENTTIMES field
 runOnset = dicomInfo.allOnsets(subjIdx).runOnset_AT; % to use ACQUISITIONTIMES field
 nRuns = length(runOnset);
 
