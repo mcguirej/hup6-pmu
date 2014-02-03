@@ -63,7 +63,6 @@ end
 % names of dicom header fields containing timestamps
 tsFields = {'ContentTime', 'AcquisitionTime'};
 
-
 try
 
 % list files in the dicom directory
@@ -118,7 +117,7 @@ fprintf('TR = %d\n',TR);
 TR_CT = diff(tstmp.ContentTime);
 TR_AT = diff(tstmp.AcquisitionTime);
 
-% verify that timestamps are increasing across images
+% verify that timestamps are non-decreasing across images
 % (i.e., that dicoms were loaded in the correct order)
 assert(all(TR_CT>=0),'ContentTime values are out of order');
 assert(all(TR_AT>=0),'AcquisitionTime values are out of order');
@@ -153,12 +152,15 @@ fprintf('  CT-based onset is %1.3f s later than AT-based onset.\n',ct_minus_at_i
 fprintf('  ContentTime stamps imply median TR of %d ms\n',median(TR_CT));
 fprintf('  AcquisitionTime stamps imply median TR of %d ms\n',median(TR_AT));
 
-% plot difference between the 2 timestamps for this run
+% plot the 2 timestamps for this run
 figure(1); clf;
-plotData = tstmp.ContentTime - tstmp.AcquisitionTime;
-plotData = plotData/1000; % convert from msec to sec
-plot(plotData,'o');
+pred_ct = tstmp.ContentTime(1) + acqLags;
+pred_at = tstmp.AcquisitionTime(1) + acqLags;
+plot([tstmp.ContentTime, tstmp.AcquisitionTime]/1000,'o'); % convert from msec to sec
+hold on;
+plot([pred_ct, pred_at]/1000,'-');
 set(gca,'Box','off','FontSize',20);
+legend('ContentTime','AcquisitionTime','Predicted CT','Predicted AT');
 ylabel('ContentTime minus AcquisitionTime (s)');
 xlabel('Image number');
 
@@ -172,7 +174,7 @@ legend('ContentTime','AcquisitionTime');
 ylabel('Inter-acquisition interval');
 xlabel('Image number');
 
-
+keyboard
 
 catch ME
     disp(getReport(ME));
