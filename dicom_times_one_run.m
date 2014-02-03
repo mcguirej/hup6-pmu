@@ -19,14 +19,16 @@ function [] = dicom_times_one_run(dicomDir,pmuFile,noPlot)
 % Of note, it is not the case that the actual TR is 2510 ms; this would
 % have made the experiment several seconds too long, but in fact its 
 % duration was accurate within stopwatch precision. So AcquisitionTime
-% entries are not perfectly accurate. 
+% entries are not perfectly accurate. However, the AT for the first image
+% appears to be a good approximation of run onset time.
 % 
 % The CT is also not fully accurate; inter-image intervals vary quite a
 % bit, but successive intervals tend to compensate so they basically agree
-% on a common time grid. 
+% on a common time grid. (CT might reflect the time the image is
+% reconstructed).
 %
 % This function runs diagnostics on each set of timestamps, and saves
-% estimated run start times (msec since midnight) based on ContentTime. 
+% estimated run start times (msec since midnight) based on CT and AT. 
 % Work with PMU data should bear in mind that there may be a couple
 % seconds of imprecision. 
 
@@ -104,7 +106,7 @@ for t = 1:nTmpts
         tstmp.(tsName)(t,1) = hrsInMsec + minsInMsec + secInMsec;
 
     end
-
+    
 end % loop over timepoints
 fprintf('done.\n');
 
@@ -173,8 +175,6 @@ set(gca,'Box','off','FontSize',20,'YLim',[0, ylims(2)]);
 legend('ContentTime','AcquisitionTime');
 ylabel('Inter-acquisition interval');
 xlabel('Image number');
-
-keyboard
 
 catch ME
     disp(getReport(ME));
