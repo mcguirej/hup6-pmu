@@ -103,7 +103,7 @@ logStartLagSec = (runOnset - foot.LogStartMDHTime)/1000;
 logStopLagSec = (foot.LogStopMDHTime - runOnset)/1000;
 fprintf('\nRun onset: %d\n',round(runOnset));
 fprintf('  PMU log started %1.2f s before run onset.\n',logStartLagSec);
-fprintf('  PMU log ended %1.2f s after run onsest.\n',logStopLagSec);
+fprintf('  PMU log ended %1.2f s after run onset.\n',logStopLagSec);
 
 %%% assign a timestamp to each marker value in the data file (i.e.,
 %%% identify times at which a "beat" was logged)
