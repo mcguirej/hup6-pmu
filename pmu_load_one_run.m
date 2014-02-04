@@ -5,6 +5,11 @@ function [ibi] = pmu_load_one_run(fname)
 % Input:
 %   fname (optional): string w/ path to the pmu data file for this subject
 %       and run. If not provided, user is prompted to select a file.
+%
+% Output:
+%   ibi: 2-column matrix
+%       col 1: heartbeat times, in s since run onset
+%       col 2: preceding inter-beat interval in s
 
 try
 
@@ -49,7 +54,7 @@ for i = 1:length(footStampLabels)
     labelStr = footStampLabels{i};
     labelIdx = find(strcmp(footer{1},[labelStr,':']))+1; % position of this timestamp in 'footer'
     foot.(labelStr) = str2double(footer{1}{labelIdx}); % store the timestamp in a more convenient data structure
-    fprintf('\t%s: %s\n',labelStr,footer{1}{labelIdx});
+    fprintf('  %s: %s\n',labelStr,footer{1}{labelIdx});
 end % loop over labels
 
 % marker values (5000, 6000, or 5003) are intermixed with real data (<5000)
@@ -58,66 +63,57 @@ d = double(data{1}); % data vector
 % index marker values of 5000 (only a subset of all the marker values)
 markerIdx = (d==5000); % index elements of d that represent marker values
 % identify the number of non-marker values
-nSamps = sum(d<5000);
+sampIdx = (d<5000);
+nSamps = sum(sampIdx);
 
 % evaluate timestamps relative to the number of values in the data record
 % NOTE:
-% this generally doesn't work out perfectly, but is
-% usually off by less than 1 sec (50 samples) in either direction
+% this generally doesn't work out perfectly, but is usually off by less 
+% than 1 sec (50 samples) in either direction
 % unclear why there is a mismatch here.
 % we'll proceed on the premise that this LogStart is correct and that the
-% inter-sample interval is exactly 20ms, but acknowledging a small amount
+% inter-sample interval is exactly 20ms, but be aware of a small amount
 % of potential timing imprecision.
 sampHz = 50;
 sampPd = 1000/sampHz; % sampling period in msec (20ms)
 mdhDurMsec = foot.LogStopMDHTime - foot.LogStartMDHTime;
 mdhDurMins = mdhDurMsec/(60*1000);
 predictedNSamps = floor(mdhDurMsec/sampPd);
-fprintf('  MDH timestamps signal %1.2f mins of recording, implying %d datapoints.\n',...
-    mdhDurMins,predictedNSamps);
+fprintf('  MDH timestamps signal %1.2f mins of recording.\n',mdhDurMins);
+fprintf('  At %dHz this implies %d datapoints.\n',sampHz,predictedNSamps);
 fprintf('  Data record contains %d points (difference = %d).\n',...
     nSamps,nSamps-predictedNSamps);
 
+%%% align with dicom timing
 
+% load results previously stored by dicom_times_one_run.m
+dicom_fname = [fname,'.dicomOnset.mat'];
+if ~exist(dicom_fname,'file')
+    fprintf('Dicom onset info not found.\n');
+    fprintf('Use dicom_times_one_run to create a file called %s\nExiting\n',dicom_fname);
+    return;
+end
+dicomInfo = load(dicom_fname);
 
-
-keyboard
-%%% resume here %%%
-
-
-
-
-
-% load run onset times 
-% (previously derived from dicom headers, using dicomContentTimes.m)
-dicomInfo = load('runOnsetTimestamps_n22.mat');
-subjIdx = strcmp(id,{dicomInfo.allOnsets.id});
-%%% NOTE:
-%%% there are 2 options here which give results differing by 2-3 sec
-%%% it's not clear which is correct
-%%% there are 2 dicom header fields that provide (different) timestamps
-% runOnset = dicomInfo.allOnsets(subjIdx).runOnset_CT; % to use CONTENTTIMES field
-runOnset = dicomInfo.allOnsets(subjIdx).runOnset_AT; % to use ACQUISITIONTIMES field
-nRuns = length(runOnset);
+% use AcquisitionTimes dicom header field
+runOnset = dicomInfo.runOnset_AT;
 
 % evaluate the lag at the beginning and end of recording
-runLengthSec = 615;
-runLengthMsec = runLengthSec*1000;
-logStartLagSec = (runOnset(1) - foot.LogStartMDHTime)/1000;
-logStopLagSec = (foot.LogStopMDHTime - (runOnset(nRuns)+runLengthMsec))/1000;
-fprintf('Estimated lag to start and stop recording:\n');
-fprintf('  PMU log started %1.2f sec before start of first run.\n',logStartLagSec);
-fprintf('  PMU log ended %1.2f sec after end of run %d.\n',logStopLagSec,nRuns);
-
+logStartLagSec = (runOnset - foot.LogStartMDHTime)/1000;
+logStopLagSec = (foot.LogStopMDHTime - runOnset)/1000;
+fprintf('\nRun onset: %d\n',round(runOnset));
+fprintf('  PMU log started %1.2f s before run onset.\n',logStartLagSec);
+fprintf('  PMU log ended %1.2f s after run onsest.\n',logStopLagSec);
 
 %%% assign a timestamp to each marker value in the data file (i.e.,
 %%% identify times at which a "beat" was logged)
 %%% then convert to IBI
 
-% 1. assign a timestamp to each data value (msec since midnight)
-sampleTimes = (1:nSamps)*sampPd + foot.LogStartMDHTime; % non-markers only
+% 1. assign a timestamp to each data value (ms since run onset)
+sampleTimes = (1:nSamps)*sampPd + foot.LogStartMDHTime - runOnset; % non-markers only
+sampleTimes = sampleTimes/1000; % convert to s since run onset
 dTimes = nan(size(d)); % has entries for both marker and non-marker values
-dTimes(~markerIdx) = sampleTimes;
+dTimes(sampIdx) = sampleTimes;
 
 % 2. each marker is assigned the timestamp of the previous non-marker
 % assume (but check) that there are never 2 consecutive markers
@@ -127,8 +123,8 @@ markerTimes = dTimes(preMarkerPos);
 assert(~any(isnan(markerTimes)),'some marker times not assigned; possible consecutive marker values?');
 
 % 3. assign each marker an IBI value corresponding to the distance to the
-% PREVIOUS marker
-ibiVals = markerTimes(2:end) - markerTimes(1:(end-1));
+% previous marker
+ibiVals = diff(markerTimes);
 ibiTimes = markerTimes(2:end);
 
 % 4. clean up outlier values in the ibi timeseries, if any.
@@ -140,51 +136,18 @@ outlierIdx = ibiVals > 1.3*medianIBI; % high outliers
 outlierIdx = outlierIdx | (ibiVals < 0.7*medianIBI);
 ibiVals(outlierIdx) = nan;
 pctOutlier = 100*sum(outlierIdx)/length(outlierIdx);
-fprintf('median IBI = %1.1fms; %d outlier values deleted (%1.2f%%).\n',...
+fprintf('\nmedian IBI = %1.3f s; %d outlier values deleted (%1.2f%%).\n',...
     medianIBI,sum(outlierIdx),pctOutlier);
 
+% output matrix
+ibi = [ibiTimes, ibiVals];
 
-% 5. apply windowed-average smoothing to the IBI timeseries???
-%%% NOTE: not being done for now, but could be added here.
-%%% the downside is a (further) loss of temporal precision.
-%%% also might consider assessing outliers relative to a running median.
+% may want to convert to percent of median IBI
+% however, this should probably be done across all runs for a given subject
+% (i.e., outside this function). 
 
-
-%%% extract information specific to each run (with timestamps relative to
-%%% run onsets).
-ibiRuns = cell(nRuns,1);
-for r = 1:nRuns
-    
-    % IBI output format:
-    % col1 = time from run onset, in sec
-    % col2 = ibi value that applies AFTER that time. 
-    runIdx = (ibiTimes > runOnset(r)) & (ibiTimes < (runOnset(r) + runLengthMsec));
-    if any(runIdx)
-        ibiRuns{r}(:,1) = ibiTimes(runIdx) - runOnset(r);
-        ibiRuns{r}(:,1) = ibiRuns{r}(:,1)/1000; % convert to sec
-        ibiRuns{r}(:,2) = ibiVals(runIdx);
-        ibiRuns{r}(end,2) = nan; % signal that there are no data after this point
-    else
-        ibiRuns{r} = []; % there is at least one run w/ no valid pmu data
-    end
-    
-end % loop over runs
-
-
-%%% convert to percent of median IBI 
-%%% (calculating the median on data from during task runs)
-% important because there are large differences in baseline
-% IBI across individuals; we want to remove these differences to focus on
-% changes over time, while retaining the ability to see differences between
-% runs in the two conditions.
-ibiAllRuns = cell2mat(ibiRuns);
-medianIBI = nanmedian(ibiAllRuns(:,2));
-for r = 1:nRuns
-    if ~isempty(ibiRuns{r}) % one run has no data
-        ibiRuns{r}(:,2) = 100*ibiRuns{r}(:,2)./medianIBI;
-    end
-end
-
+% depending on the eventual analysis, may also want to apply smoothing to
+% the ibi timecourse
 
 catch ME
     

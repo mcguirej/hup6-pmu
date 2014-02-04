@@ -3,7 +3,7 @@ hup6-pmu
 
 Code for processing physiological data acquired during MRI scans.
 
-These functions load a PMU pulse ox data series and line it up with 
+These functions load a PMU pulse-ox data series and line it up with 
 timestamps in the headers of the associated dicom files. 
 
 dicom_times_one_run.m: This function prompts the user for a dicom directory
@@ -16,7 +16,8 @@ might not always be accessible).
 
 pmu_load_one_run.m: Prompts the user for a pulse file. Reads timing 
 information in the footer and lines up the data with dicom timing info
-saved previously as described above. 
+saved previously as described above. Returns an inter-beat interval
+timeseries.
 
 There are two reasons to believe the temporal alignment is imperfect.
 
@@ -32,7 +33,7 @@ slightly more than the TR.
 (We ruled out the possibility that the TR really is longer than intended
 by stopwatch timing the run. The AcquisitionTime values imply a cumulative
 lag of several seconds across a 10-min run, but the actual run duration 
-as close to correct as we could measure.)
+was as close to correct as we could measure.)
 
 (2) Within the PMU data file, the number of data samples (after stripping
 marker values) tends not to match exactly with the number implied by the
